@@ -55,8 +55,8 @@ pub struct Cli {
     #[arg(long = "output-dir", value_name = "DIR")]
     pub output_dir: Option<PathBuf>,
 
-    /// Run continuously: `once`, `--interval <duration>` (e.g. 1h, 30m, 15min),
-    /// or `--daily [HH:MM]` (default midnight)
+    /// Run continuously: `once`, `interval::<duration>` (e.g. interval::1h),
+    /// or `daily::<HH:MM>` (default midnight)
     #[arg(long = "schedule", value_name = "MODE")]
     pub schedule: Option<String>,
 

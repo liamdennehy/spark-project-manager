@@ -1,0 +1,78 @@
+# spark-project-status@.service
+#
+# Service template for generating status reports from a NextCloud Deck board.
+# Instantiate per-project:
+#   systemctl enable --now spark-project-status@my-project
+#
+# The instance name (e.g. "my-project") becomes the $INSTANCE variable,
+# used for:
+#   - ConfigurationDirectory  → /etc/spark-project-status/my-project/.env
+#   - ConfigurationDirectory  → /usr/local/share/spark-project-status/my-project/.env
+#   - RuntimeDirectory        → /run/spark-project-status/my-project
+#   - Logs                    → journalctl -u spark-project-status@my-project
+
+[Unit]
+Description=Spark Project Status Report (%i)
+Documentation=https://github.com/your-org/spark-project-manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+
+# ── Paths ──────────────────────────────────────────────────────────
+# Configuration file (.env) — search order:
+#   /etc/spark-project-status/<instance>/.env   (system admin)
+#   /usr/local/share/spark-project-status/<instance>/.env  (package)
+ConfigurationDirectory=spark-project-status/%i
+ConfigurationDirectoryMode=0700
+
+# Runtime directory for output files
+RuntimeDirectory=spark-project-status/%i
+RuntimeDirectoryMode=0755
+
+# Working directory = runtime dir so relative output paths resolve cleanly
+WorkingDirectory=/run/spark-project-status/%i
+
+# ── Exec ───────────────────────────────────────────────────────────
+# The binary reads its config from ConfigurationDirectory via the
+# --config flag. We pass the absolute path to .env inside the
+# ConfigurationDirectory tree.
+ExecStartPre=/usr/bin/test -f /etc/spark-project-status/%i/.env || \
+             /usr/bin/test -f /usr/local/share/spark-project-status/%i/.env || \
+             { echo "No .env found in ConfigurationDirectory for %i"; exit 1; }
+ExecStart=/usr/local/bin/spark-project-status \
+    --config /etc/spark-project-status/%i/.env \
+    --print \
+    --output-dir /run/spark-project-status/%i
+
+# ── User / Security ────────────────────────────────────────────────
+# Run as an unprivileged system user created by spark-project-status.sysusers
+User=spark-project-status
+Group=spark-project-status
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/run/spark-project-status/%i
+
+# ── Resource limits ────────────────────────────────────────────────
+MemoryMax=256M
+TimeoutStartSec=120
+TimeoutStopSec=30
+
+# ── Logging ────────────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+LogLevelMax=info
+
+[Install]
+WantedBy=multi-user.target

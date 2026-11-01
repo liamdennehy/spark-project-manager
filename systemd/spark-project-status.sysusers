@@ -1,0 +1,14 @@
+# spark-project-status.sysusers
+#
+# System user/group for the spark-project-status service.
+# Place this file in /usr/lib/sysusers.d/ or /etc/sysusers.d/
+# and run systemd-sysusers --system, or simply:
+#   systemd-sysusers
+#
+# Format: type  name  uid/gid  gecos  groups  home  shell
+#
+# "s" = system account, no login, no home dir, no password.
+# The service runs as this user and writes reports to
+# RuntimeDirectory (mapped to /run/spark-project-status/<instance>).
+
+spark-project-status  s  -  "Spark Project Status Service User"  -  -  /usr/sbin/nologin

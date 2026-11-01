@@ -38,13 +38,17 @@ The `.env` file is git-ignored. See `sample.env` for documented parameter descri
 If no `.env` file exists, the tool launches an interactive wizard on start:
 
 1. Enter your NextCloud URL, username, and app-password
-2. Validates credentials and lists available Deck boards
-3. **Board creation** — if no boards exist, offers to create one via the Deck API
+2. Validates credentials via Deck API and WebDAV (no CSRF issues)
+3. Lists available Deck boards; offers to create one if none exist
 4. **Board configurator** — if the selected board is missing required stacks
    (To-Do, Doing, Done, Cancelled), offers to create them automatically
-5. Selects the board to use
-6. Chooses the prompt variant (e.g. Agile, Travel, Meal Planning)
-7. Generates `.env` and copies the selected `Spark-Instructions.md`
+5. Enter project name and parent folder path
+6. Chooses prompt instructions:
+   - If `Spark-Instructions.md` already exists in the remote project folder,
+     the wizard offers to keep it or select from built-in templates
+   - If a template is selected and remote instructions exist, a confirmation
+     is shown to prevent accidental overwrites
+7. Uploads selected instructions to the remote folder and generates `.env`
 
 To skip the wizard when no `.env` exists, pass `--help` or any CLI flag (e.g. `--nc-url`):
 
@@ -94,14 +98,14 @@ spark-project-status \
   --spark-url "http://localhost:8214" \
   --project-name "My Project" \
   --project-parent "Personal" \
-  --config ./env
+  --config ./.env
 ```
 
 ### CLI flags
 
 | Flag | Description |
 |------|-------------|
-| `-c, --config <FILE>` | Path to config file (default: `./env`) |
+| `-c, --config <FILE>` | Path to config file (default: `./.env`) |
 | `--nc-url <URL>` | NextCloud URL |
 | `--nc-user <TOKEN>` | NextCloud app-user |
 | `--nc-password <TOKEN>` | NextCloud app-password |
@@ -112,7 +116,7 @@ spark-project-status \
 | `--dry-run` | Check WebDAV state without uploading; prints report to stdout |
 | `--output-dir <DIR>` | Save local copy of report |
 | `--no-web-theme` | Skip prepending the web-theme to the report |
-| `--schedule <MODE>` | Run continuously: `once`, `interval::<duration>` (e.g. `1h`), or `daily::<HH:MM>` (default midnight) |
+| `--schedule <MODE>` | Run continuously: `once` (default), `interval::<duration>` (e.g. `interval::1h`), or `daily::<HH:MM>` (default midnight) |
 | `--schedule-window <WIN>` | Only run inside a time window, e.g. `08:00-19:00` (idle overnight) |
 | `--print` | Always print report to stdout (even in production mode) |
 | `--save-only` | Save report locally only — skip WebDAV upload |
@@ -125,12 +129,14 @@ spark-project-status \
 ### Dry-run
 
 ```bash
-spark-project-status --dry-run --spark-url "http://127.0.0.1:8214"
+spark-project-status --dry-run
 ```
 
-Outputs the full report (theme + LLM content) to stdout and prints stats. Also checks the WebDAV folder and target file to confirm the upload destination is valid:
+Outputs the full report (theme + LLM content) to stdout and prints stats. Checks WebDAV state without uploading:
 
 ```
+[dry-run] Deck board #13 fetched (24 cards)
+[dry-run] LLM inference complete
 [dry-run] WebDAV folder exists
 [dry-run] Destination file does not exist yet: https://...
 ```
@@ -142,7 +148,7 @@ Usage: prompt=1500, completion=420, total=1920
 
 ## Scheduled / continuous reporting
 
-The `--schedule` flag runs report generation on a repeating cycle:
+The `--schedule` flag runs report generation on a repeating cycle. When omitted, runs once and exits.
 
 ```bash
 # Run every hour
@@ -151,14 +157,14 @@ spark-project-status --schedule "interval::1h"
 # Run every 30 minutes
 spark-project-status --schedule "interval::30m"
 
-# Run once per day at midnight (default)
+# Run once per day at midnight (default when schedule is given without time)
 spark-project-status --schedule "daily"
 
 # Run once per day at 6:00 AM
 spark-project-status --schedule "daily::06:00"
 
-# Run once and exit (default)
-spark-project-status --schedule "once"
+# Run once and exit (default — omit --schedule entirely)
+spark-project-status
 ```
 
 ### Active scheduling window
@@ -178,40 +184,59 @@ Overnight windows also work (e.g. `22:00-06:00`).
 
 Press `Ctrl+C` to stop scheduled runs.
 
-## Systemd service
+## Systemd deployment
 
-When running under `systemd`, the `RuntimeDirectory=` directive provides a managed temp directory. The tool detects `RUNTIME_DIRECTORY` and uses it directly.
+The `systemd/` directory contains instantiated service and timer templates for multi-instance deployment (one per project).
 
-### Example service
+### Quick start
 
-```ini
-[Unit]
-Description=Spark Project Status Report
-After=network-online.target
+```bash
+# Build
+cargo build --release
 
-[Service]
-Type=oneshot
-RuntimeDirectory=spark-project-status
-ExecStart=/usr/local/bin/spark-project-status --spark-url "http://127.0.0.1:8214"
-Environment=RUNTIME_DIRECTORY=/run/spark-project-status
+# Install units, create system user, set up directories
+sudo ./systemd/install-systemd.sh ./target/release/spark-project-status
 
-[Install]
-WantedBy=multi-user.target
+# Create a project configuration
+sudo mkdir -p /etc/spark-project-status/my-project
+cp systemd/sample.env /etc/spark-project-status/my-project/.env
+# Edit /etc/spark-project-status/my-project/.env with your settings
+
+# Enable and start
+sudo systemctl enable --now spark-project-status@my-project.timer
 ```
 
-### Example timer
+### Manual installation
 
-```ini
-[Unit]
-Description=Generate weekly project status report
+Copy the unit files from `systemd/`:
 
-[Timer]
-OnCalendar=weekly
-Persistent=true
+| File | Destination |
+|------|-------------|
+| `spark-project-status@.service` | `/etc/systemd/system/` |
+| `spark-project-status@.timer` | `/etc/systemd/system/` |
+| `spark-project-status.sysusers` | `/etc/sysusers.d/` |
+| `spark-project-status.tmpfiles.d` → `spark-project-status.conf` | `/etc/tmpfiles.d/` |
 
-[Install]
-WantedBy=timers.target
+Then: `sudo systemctl daemon-reload`
+
+### Per-project management
+
+```bash
+# Start once (without timer)
+sudo systemctl start spark-project-status@my-project.service
+
+# View logs
+journalctl -u spark-project-status@my-project.service -f
+
+# Find reports
+ls -la /run/spark-project-status/my-project/
+
+# Disable/remove
+sudo systemctl disable --now spark-project-status@my-project.timer
+sudo rm -rf /etc/spark-project-status/my-project
 ```
+
+See `systemd/README.md` for full documentation.
 
 ## Ignored fields
 
@@ -220,17 +245,20 @@ The tool strips the following fields from Deck cards before sending to the LLM. 
 | Field | Reason |
 |-------|--------|
 | `.color` | Visual-only |
-| `.stackId` | Known from context |
-| `.type` | Always `"plain"` |
-| `.lastModified`, `.createdAt` | Timestamps irrelevant for status |
+| `.stackId` | Known from context (which column we're in) |
+| `.type` | Always `"plain"` — noise |
+| `.lastModified`, `.createdAt`, `.deletedAt` | Timestamps irrelevant for status |
 | `.lastEditor` | Irrelevant |
-| `.attachmentCount` | Count without URLs |
-| `.order`, `.commentsCount`, `.commentsUnread` | Noise |
+| `.attachmentCount` | Count without URLs — useless |
+| `.order` | Sort order — irrelevant |
+| `.commentsCount`, `.commentsUnread` | Count/notification without content |
 | `.ETag` | Internal sync token |
-| `.referenceData`, `.dependentCards` | Rarely populated |
-| `.owner` | Known from context |
+| `.referenceData` | Internal reference (usually null) |
+| `.dependentCards` | Dependency tracking — rarely populated |
+| `.owner` | Board owner — known from context |
 | `.assignedUsers[].id`, `.cardId`, `.type` | Numeric IDs without context |
-| `.assignedUsers[].participant.type`, `.primaryKey` | Internal identifiers |
+| `.assignedUsers[].participant.type`, `.participant.primaryKey` | Internal identifiers |
+| `.archived` | Boolean archive flag — noise |
 
 ## Project structure
 

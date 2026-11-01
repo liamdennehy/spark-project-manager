@@ -1,0 +1,30 @@
+# spark-project-status@.timer
+#
+# Timer template for periodic status report generation.
+# Instantiate per-project:
+#   systemctl enable --now spark-project-status@my-project.timer
+#
+# The timer triggers the associated service daily at 06:00 by default.
+# Override OnCalendar= to change the schedule (see timer(5)).
+#
+# Example — run every 4 hours:
+#   systemctl edit spark-project-status@my-project.timer
+#   [Timer]
+#   OnCalendar=*-*-* 00/4:00:00
+#   Persistent=true
+
+[Unit]
+Description=Spark Project Status Report Timer (%i)
+Documentation=https://github.com/your-org/spark-project-manager
+Requires=spark-project-status@%i.service
+
+[Timer]
+# Daily at 06:00 (local time)
+OnCalendar=*-*-* 06:00:00
+# Ensure missed runs are caught up after boot/restart
+Persistent=true
+# Add a random delay to avoid thundering-herd when many timers fire
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
