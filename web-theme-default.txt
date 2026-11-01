@@ -1,0 +1,9 @@
+---
+theme:
+  background: "#0f0f23"
+  color: "#e8e8f0"
+  font-heading: "Georgia, serif"
+  font-body: "system-ui, -apple-system, sans-serif"
+  accent: "#f0c040"
+---
+
