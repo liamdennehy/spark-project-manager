@@ -104,26 +104,30 @@ spark-project-status \
 ### CLI flags
 
 | Flag | Description |
-|------|-------------|
-| `-c, --config <FILE>` | Path to config file (default: `./.env`) |
-| `--nc-url <URL>` | NextCloud URL |
-| `--nc-user <TOKEN>` | NextCloud app-user |
-| `--nc-password <TOKEN>` | NextCloud app-password |
-| `--board-id <ID>` | Deck board ID |
-| `--spark-url <URL>` | LLM API base URL |
-| `--project-name <NAME>` | Project name |
-| `--project-parent <PATH>` | Files parent path in NextCloud |
-| `--dry-run` | Check WebDAV state without uploading; prints report to stdout |
-| `--output-dir <DIR>` | Save local copy of report |
-| `--no-web-theme` | Skip prepending the web-theme to the report |
-| `--schedule <MODE>` | Run continuously: `once` (default), `interval::<duration>` (e.g. `interval::1h`), or `daily::<HH:MM>` (default midnight) |
-| `--schedule-window <WIN>` | Only run inside a time window, e.g. `08:00-19:00` (idle overnight) |
-| `--print` | Always print report to stdout (even in production mode) |
-| `--save-only` | Save report locally only — skip WebDAV upload |
-| `--filename <NAME>` | Use a static report filename instead of timestamped |
-| `--copy-dav` | Also copy the report to a timestamped name via WebDAV (requires `--filename`) |
-| `-v, --verbose` | Print intermediate JSON to stderr |
-| `-h, --help` | Show help |
+| Flag | Env Var | Description |
+|------|---------|-------------|
+| `-c, --config <FILE>` | — | Path to config file (default: `./.env`) |
+| `--nc-url <URL>` | `NC_URL` | NextCloud URL |
+| `--nc-user <TOKEN>` | `NC_APP_USER` | NextCloud app-user |
+| `--nc-password <TOKEN>` | `NC_APP_PWD` | NextCloud app-password/token |
+| `--board-id <ID>` | `NCDECK_BOARD_ID` | Deck board ID |
+| `--spark-url <URL>` | `SPARK_URL` | LLM API base URL |
+| `--api-key <KEY>` | `SPARK_API_KEY` | LLM Bearer token |
+| `--project-name <NAME>` | `PROJECT_NAME` | Project name |
+| `--project-parent <PATH>` | `PROJECT_FILES_PARENT_PATH` | Files parent path in NextCloud |
+| `--dry-run` | `DRY_RUN` | Check WebDAV state without uploading; prints report to stdout |
+| `--output-dir <DIR>` | `RUNTIME_DIRECTORY` | Save local copy of report |
+| `--schedule <MODE>` | `SPARK_SCHEDULE` | Run continuously: `once` (default), `interval::<duration>`, or `daily::<HH:MM>` |
+| `--schedule-window <WIN>` | `SCHEDULE_WINDOW` | Active scheduling window, e.g. `08:00-19:00` |
+| `--web-theme` | `WEB_THEME` | Prepend YAML front-matter theme to report |
+| `--print` | `PRINT` | Always print report to stdout (even in production) |
+| `--save-only` | `SAVE_ONLY` | Save report locally only — skip WebDAV upload |
+| `--filename <NAME>` | `REPORT_FILENAME` | Static report filename (default: timestamped) |
+| `--copy-dav` | `COPY_DAV` | Copy report to timestamped name via WebDAV COPY |
+| `--show-config` | — | Show effective configuration and exit |
+| `-v, --verbose` | — | Print intermediate JSON to stderr |
+| `-h, --help` | — | Show help |
+| `-V, --version` | — | Show version |
 | `-V, --version` | Show version |
 
 ### Dry-run

@@ -12,7 +12,7 @@ mod webdav;
 
 use anyhow::{Context, Result, bail};
 use chrono::{Local, Offset};
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 use config::{env_value, parse_env_file, Cli, Config, Schedule};
 use dialoguer::Confirm;
 use std::env;
@@ -29,13 +29,13 @@ use crate::webdav::{
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // ── Help with effective values ───────────────────────────────────
+    // ── Show effective config and exit ───────────────────────────────
     let args: Vec<String> = std::env::args().collect();
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        // Use get_matches so clap doesn't auto-exit on --help
+    if args.iter().any(|a| a == "--show-config") {
+        // Parse args excluding --show-config so Config::load works normally
         let cli = Cli::parse_from(
             args.iter()
-                .filter(|a| *a != "--help" && *a != "-h")
+                .filter(|a| *a != "--show-config")
                 .cloned()
                 .collect::<Vec<_>>()
         );
@@ -46,13 +46,8 @@ async fn main() -> Result<()> {
             Vec::new()
         };
 
-        // Print standard help
-        Cli::command().print_help()?;
-        eprintln!();
-
-        // Print effective configuration
-        eprintln!("\nEffective configuration:");
-        eprintln!("────────────────────────");
+        println!("Effective configuration:");
+        println!("────────────────────────");
         print_effective_value("NC_URL", cli.nc_url.as_ref(), env_value(&env_pairs, "NC_URL"));
         print_effective_value("NC_APP_USER", cli.nc_user.as_ref(), env_value(&env_pairs, "NC_APP_USER"));
         print_masked_value("NC_APP_PWD", cli.nc_password.as_ref(), env_value(&env_pairs, "NC_APP_PWD"));
@@ -62,15 +57,15 @@ async fn main() -> Result<()> {
         print_effective_value("PROJECT_NAME", cli.project_name.as_ref(), env_value(&env_pairs, "PROJECT_NAME"));
         print_effective_value("PROJECT_FILES_PARENT_PATH", cli.project_parent.as_ref(), env_value(&env_pairs, "PROJECT_FILES_PARENT_PATH"));
         print_effective_value("REPORT_FILENAME", cli.filename.as_ref(), env_value(&env_pairs, "REPORT_FILENAME"));
-        eprintln!("  --save-only:            {}", cli.save_only);
-        eprintln!("  --copy-dav:             {}", cli.copy_dav);
-        eprintln!("  --print:                {}", cli.print);
-        eprintln!("  --dry-run:              {}", cli.dry_run);
-        eprintln!("  --no-web-theme:         {}", cli.no_web_theme);
-        eprintln!("  --schedule:             {:?}", cli.schedule.as_deref());
-        eprintln!("  --schedule-window:      {:?}", cli.schedule_window);
-        eprintln!("  Config file:            {:?}", cfg_path);
-        eprintln!();
+        println!("  --save-only:            {}", cli.save_only);
+        println!("  --copy-dav:             {}", cli.copy_dav);
+        println!("  --print:                {}", cli.print);
+        println!("  --dry-run:              {}", cli.dry_run);
+        println!("  --web-theme:            {}", cli.web_theme);
+        println!("  --schedule:             {:?}", cli.schedule.as_deref());
+        println!("  --schedule-window:      {:?}", cli.schedule_window);
+        println!("  Config file:            {:?}", cfg_path);
+        println!();
         return Ok(());
     }
 
@@ -190,30 +185,32 @@ async fn run_report(config: &Config, cli: &Cli) -> Result<()> {
         eprintln!("[verbose] WebDAV base URL: {}", files_base);
     }
 
-    // ── Fetch or create web-theme ──────────────────────────────────
+    // ── Fetch web-theme (if enabled) ───────────────────────────────
     let web_theme_path = runtime_dir.join("web-theme.txt");
-    if nc_has_file(&files_base, "web-theme.txt", &config.nc_app_user, &config.nc_app_pwd).await? {
-        fetch_file(
-            &files_base,
-            "web-theme.txt",
-            &config.nc_app_user,
-            &config.nc_app_pwd,
-            &web_theme_path,
-        )
-        .await?;
-    } else {
-        let default_theme =
-            fs::read_to_string("web-theme-default.txt").unwrap_or_else(|_| String::new());
-        fs::write(&web_theme_path, &default_theme)?;
-        if !cli.dry_run {
-            put_file(
+    if config.web_theme {
+        if nc_has_file(&files_base, "web-theme.txt", &config.nc_app_user, &config.nc_app_pwd).await? {
+            fetch_file(
                 &files_base,
                 "web-theme.txt",
-                &web_theme_path,
                 &config.nc_app_user,
                 &config.nc_app_pwd,
+                &web_theme_path,
             )
             .await?;
+        } else {
+            let default_theme =
+                fs::read_to_string("web-theme-default.txt").unwrap_or_else(|_| String::new());
+            fs::write(&web_theme_path, &default_theme)?;
+            if !cli.dry_run {
+                put_file(
+                    &files_base,
+                    "web-theme.txt",
+                    &web_theme_path,
+                    &config.nc_app_user,
+                    &config.nc_app_pwd,
+                )
+                .await?;
+            }
         }
     }
 
@@ -313,12 +310,12 @@ async fn run_report(config: &Config, cli: &Cli) -> Result<()> {
         .context("No message content in LLM response")?;
 
     // Prepend web theme to report (if not disabled)
-    let full_report = if config.no_web_theme {
-        report_content
-    } else {
+    let full_report = if config.web_theme {
         let web_theme =
             fs::read_to_string(&web_theme_path).with_context(|| "Failed to read web-theme.txt")?;
         format!("{}\n{}", web_theme, report_content)
+    } else {
+        report_content
     };
 
     // Re-parse CLI for flag access (Config::load() consumes parse internally)
@@ -329,11 +326,16 @@ async fn run_report(config: &Config, cli: &Cli) -> Result<()> {
     let encoded_name = urlencoding::encode(&report_name);
     let dest_url = format!("{}/{}", files_base, encoded_name);
 
+    // Determine whether to print to stdout.
+    // --dry-run and --print always print.
+    // --save-only prints only when there is no other destination
+    // (--output-dir, --filename, or --copy-dav would satisfy the user).
+    let has_other_dest = !config.output_dir.as_os_str().is_empty()
+        || config.filename.is_some()
+        || config.copy_dav;
     let should_print = config.print
         || cli.dry_run
-        || !config.output_dir.as_os_str().is_empty()
-        || config.save_only
-        || config.copy_dav;
+        || (config.save_only && !has_other_dest);
 
     if cli.dry_run {
         // ── Dry-run mode: check WebDAV state without uploading ──

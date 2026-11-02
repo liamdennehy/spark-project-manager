@@ -400,9 +400,9 @@ pub async fn run_setup() -> Result<()> {
             .default(String::from(""))
             .interact_text()?;
 
-        let no_web_theme = Confirm::with_theme(&theme)
-            .with_prompt("7/8 Skip web-theme in report output? (plain-text mode)")
-            .default(false)
+        let web_theme = Confirm::with_theme(&theme)
+            .with_prompt("7/8 Prepend web-theme to report output? (YAML front-matter)")
+            .default(true)
             .interact()?;
 
         let schedule_window: String = Input::with_theme(&theme)
@@ -421,7 +421,7 @@ pub async fn run_setup() -> Result<()> {
             &nc_url, &nc_user, &nc_password, ncdeck_board_id,
             &spark_url, &spark_api_key,
             &project_name, &project_parent,
-            &spark_instructions, was_uploaded, no_web_theme, &schedule_window,
+            &spark_instructions, was_uploaded, web_theme, &schedule_window,
         )?;
     } else {
         // ── Step 3 (cont): Select existing board ─────────────────────────
@@ -464,9 +464,9 @@ pub async fn run_setup() -> Result<()> {
             .default(String::from(""))
             .interact_text()?;
 
-        let no_web_theme = Confirm::with_theme(&theme)
-            .with_prompt("7/8 Skip web-theme in report output? (plain-text mode)")
-            .default(false)
+        let web_theme = Confirm::with_theme(&theme)
+            .with_prompt("7/8 Prepend web-theme to report output? (YAML front-matter)")
+            .default(true)
             .interact()?;
 
         let schedule_window: String = Input::with_theme(&theme)
@@ -485,7 +485,7 @@ pub async fn run_setup() -> Result<()> {
             &nc_url, &nc_user, &nc_password, ncdeck_board_id,
             &spark_url, &spark_api_key,
             &project_name, &project_parent,
-            &spark_instructions, was_uploaded, no_web_theme, &schedule_window,
+            &spark_instructions, was_uploaded, web_theme, &schedule_window,
         )?;
     }
 
@@ -514,7 +514,7 @@ fn write_env_and_prompts(
     project_name: &str, project_parent: &str,
     spark_instructions: &str,
     was_uploaded: bool,
-    no_web_theme: bool,
+    web_theme: bool,
     schedule_window: &str,
 ) -> Result<()> {
     let env_content = format!(
@@ -528,7 +528,7 @@ fn write_env_and_prompts(
          SPARK_API_KEY=\"{spark_api_key}\"\n\
          PROJECT_NAME=\"{project_name}\"\n\
          PROJECT_FILES_PARENT_PATH=\"{project_parent}\"\n\
-         NO_WEB_THEME={no_web_theme}\n\
+         WEB_THEME={web_theme}\n\
          {}\n", schedule_window_line(schedule_window),
     );
 
@@ -566,7 +566,7 @@ fn write_env_and_prompts(
 /// Returns true if no env file exists and no CLI overrides are given.
 pub fn should_interact() -> bool {
     let args: Vec<String> = std::env::args().collect();
-    if args.iter().any(|a| a == "--help" || a == "-h" || a == "--version" || a == "-V") {
+    if args.iter().any(|a| a == "--help" || a == "-h" || a == "--version" || a == "-V" || a == "--show-config") {
         return false;
     }
 
@@ -577,7 +577,7 @@ pub fn should_interact() -> bool {
     let config_flags = [
         "--nc-url", "--nc-user", "--nc-password", "--board-id",
         "--spark-url", "--api-key", "--project-name", "--project-parent",
-        "--no-web-theme", "--schedule", "--print", "--save-only", "--filename", "--copy-dav",
+        "--web-theme", "--schedule", "--print", "--save-only", "--filename", "--copy-dav",
     ];
     if config_flags.iter().any(|f| std::env::args().any(|a| a == *f)) {
         return false;
@@ -661,7 +661,7 @@ pub async fn prompt_selection_wizard(
                         "Remote instructions exist at {}. Overwrite?",
                         remote_instr_path
                     ))
-                    .default(false)
+                    .default(true)
                     .interact()?;
 
                 if !overwrite {

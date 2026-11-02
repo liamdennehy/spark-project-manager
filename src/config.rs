@@ -15,74 +15,77 @@ pub struct Cli {
     #[arg(short, long, value_name = "FILE")]
     pub config: Option<PathBuf>,
 
-    /// NextCloud URL (overrides env file)
+    /// NextCloud URL [env: NC_URL]
     #[arg(long = "nc-url", value_name = "URL")]
     pub nc_url: Option<String>,
 
-    /// NextCloud app-user token (overrides env file)
+    /// NextCloud app-user token [env: NC_APP_USER]
     #[arg(long = "nc-user", value_name = "TOKEN")]
     pub nc_user: Option<String>,
 
-    /// NextCloud app-password/token (overrides env file)
+    /// NextCloud app-password/token [env: NC_APP_PWD]
     #[arg(long = "nc-password", value_name = "TOKEN")]
     pub nc_password: Option<String>,
 
-    /// Deck board ID to query (overrides env file)
+    /// Deck board ID to query [env: NCDECK_BOARD_ID]
     #[arg(long = "board-id", value_name = "ID")]
     pub board_id: Option<u64>,
 
-    /// Spark / OpenAI-compatible API base URL (overrides env file)
+    /// Spark / OpenAI-compatible API base URL [env: SPARK_URL]
     #[arg(long = "spark-url", value_name = "URL")]
     pub spark_url: Option<String>,
 
-    /// API key for the LLM server (sent as Authorization Bearer header)
+    /// API key for the LLM server (Bearer header) [env: SPARK_API_KEY]
     #[arg(long = "api-key", value_name = "KEY")]
     pub api_key: Option<String>,
 
-    /// Project name used in report filename (overrides env file)
+    /// Project name used in report filename [env: PROJECT_NAME]
     #[arg(long = "project-name", value_name = "NAME")]
     pub project_name: Option<String>,
 
-    /// Project files parent path in NextCloud (overrides env file)
+    /// Project files parent path in NextCloud [env: PROJECT_FILES_PARENT_PATH]
     #[arg(long = "project-parent", value_name = "PATH")]
     pub project_parent: Option<String>,
 
-    /// Do not upload the report to NextCloud; print to stdout instead
+    /// Do not upload the report to NextCloud; print to stdout instead [env: DRY_RUN]
     #[arg(long)]
     pub dry_run: bool,
 
-    /// Output directory for local file saving (default: current directory)
+    /// Output directory for local file saving (default: current directory) [env: RUNTIME_DIRECTORY]
     #[arg(long = "output-dir", value_name = "DIR")]
     pub output_dir: Option<PathBuf>,
 
-    /// Run continuously: `once`, `interval::<duration>` (e.g. interval::1h),
-    /// or `daily::<HH:MM>` (default midnight)
+    /// Run continuously: `once`, `interval::<duration>` (e.g. interval::1h), or `daily::<HH:MM>` (default midnight) [env: SPARK_SCHEDULE]
     #[arg(long = "schedule", value_name = "MODE")]
     pub schedule: Option<String>,
 
-    /// Active scheduling window: `HH:MM-HH:MM` — scheduler only runs inside this window
+    /// Active scheduling window: `HH:MM-HH:MM` — scheduler only runs inside this window [env: SCHEDULE_WINDOW]
     #[arg(long = "schedule-window", value_name = "WINDOW")]
     pub schedule_window: Option<String>,
 
-    /// Do not prepend the web-theme to the report
-    #[arg(long = "no-web-theme")]
-    pub no_web_theme: bool,
+    /// Prepend the web-theme to the report (YAML front-matter) [env: WEB_THEME]
+    #[arg(long = "web-theme")]
+    pub web_theme: bool,
 
-    /// Print the report to stdout (default: only in --dry-run, or when --output-dir is set)
+    /// Print the report to stdout (even in production mode) [env: PRINT]
     #[arg(long = "print")]
     pub print: bool,
 
-    /// Save the report locally only — do not upload to WebDAV
+    /// Save report locally only — do not upload to WebDAV [env: SAVE_ONLY]
     #[arg(long = "save-only")]
     pub save_only: bool,
 
-    /// Report filename (default: <timestamp> Project Status.md; set to a static name like project-status.md)
+    /// Report filename (default: <timestamp> Project Status.md) [env: REPORT_FILENAME]
     #[arg(long = "filename")]
     pub filename: Option<String>,
 
-    /// Also copy the report to a timestamped name after upload (requires --filename)
+    /// Copy report to a timestamped name via WebDAV COPY after upload (requires --filename) [env: COPY_DAV]
     #[arg(long = "copy-dav")]
     pub copy_dav: bool,
+
+    /// Show effective configuration and exit
+    #[arg(long = "show-config")]
+    pub show_config: bool,
 
     /// Verbose output — print intermediate JSON to stderr
     #[arg(short, long)]
@@ -180,8 +183,8 @@ pub struct Config {
     pub output_dir: PathBuf,
     /// Schedule mode: "once", "interval::<duration>", or "daily::<HH:MM>"
     pub schedule: Schedule,
-    /// Whether to skip prepending the web-theme to reports.
-    pub no_web_theme: bool,
+    /// Whether to prepend the web-theme to reports.
+    pub web_theme: bool,
     /// Active scheduling window — scheduler only runs inside this window.
     pub schedule_window: Option<ScheduleWindow>,
     /// Whether to print the report to stdout.
@@ -295,7 +298,7 @@ impl Config {
 
         let schedule = parse_schedule(&cli.schedule.clone().or_else(|| env_value(&env_pairs, "SPARK_SCHEDULE").map(String::from)))?;
         let schedule_window = parse_schedule_window(cli.schedule_window.clone().or_else(|| env_value(&env_pairs, "SCHEDULE_WINDOW").map(String::from)))?;
-        let no_web_theme = cli.no_web_theme || env_value(&env_pairs, "NO_WEB_THEME").is_some();
+        let web_theme = cli.web_theme || env_value(&env_pairs, "WEB_THEME").is_some();
         let print = cli.print;
         let save_only = cli.save_only || env_value(&env_pairs, "SAVE_ONLY").is_some();
         let filename = match cli.filename.as_ref() {
@@ -317,7 +320,7 @@ impl Config {
                 cards_ignored_fields,
                 output_dir,
                 schedule,
-                no_web_theme,
+                web_theme,
                 schedule_window,
                 print,
                 save_only,
@@ -346,7 +349,7 @@ impl Config {
         } else {
             eprintln!("[verbose] SCHEDULE_WINDOW: (no window — always active)");
         }
-        eprintln!("[verbose] NO_WEB_THEME: {}", self.no_web_theme);
+        eprintln!("[verbose] WEB_THEME: {}", self.web_theme);
         if let Some(ref f) = self.filename {
             eprintln!("[verbose] REPORT_FILENAME: {}", f);
         } else {
