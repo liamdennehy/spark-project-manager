@@ -57,14 +57,29 @@ async fn main() -> Result<()> {
         print_effective_value("PROJECT_NAME", cli.project_name.as_ref(), env_value(&env_pairs, "PROJECT_NAME"));
         print_effective_value("PROJECT_FILES_PARENT_PATH", cli.project_parent.as_ref(), env_value(&env_pairs, "PROJECT_FILES_PARENT_PATH"));
         print_effective_value("REPORT_FILENAME", cli.filename.as_ref(), env_value(&env_pairs, "REPORT_FILENAME"));
-        println!("  --save-only:            {}", cli.save_only);
-        println!("  --copy-dav:             {}", cli.copy_dav);
-        println!("  --print:                {}", cli.print);
-        println!("  --dry-run:              {}", cli.dry_run);
-        println!("  --web-theme:            {}", cli.web_theme);
-        println!("  --schedule:             {:?}", cli.schedule.as_deref());
-        println!("  --schedule-window:      {:?}", cli.schedule_window);
-        println!("  Config file:            {:?}", cfg_path);
+        // output_dir — no env var, just CLI
+        let output_dir_src = if cli.output_dir.as_ref().map_or(false, |p| *p != PathBuf::from(".")) { "cli" } else { "default" };
+        let output_dir_val = cli.output_dir.as_ref().map_or(String::from("."), |p| p.to_string_lossy().to_string());
+        println!("  {:30} {:12} {}", "--output-dir", output_dir_src, output_dir_val);
+        // Helper to show bool flags with source
+        let show_bool = |label: &str, cli_val: bool, env_set: bool| {
+            let source = if cli_val { "cli" } else if env_set { "env" } else { "default" };
+            let val = if cli_val || env_set { "true" } else { "false" };
+            println!("  {:30} {:12} {}", label, source, val);
+        };
+        show_bool("--dry-run", cli.dry_run, env_value(&env_pairs, "DRY_RUN").is_some());
+        show_bool("--web-theme", cli.web_theme, env_value(&env_pairs, "WEB_THEME").is_some());
+        show_bool("--print", cli.print, env_value(&env_pairs, "PRINT").is_some());
+        show_bool("--save-only", cli.save_only, env_value(&env_pairs, "SAVE_ONLY").is_some());
+        show_bool("--copy-dav", cli.copy_dav, env_value(&env_pairs, "COPY_DAV").is_some());
+        let schedule_src = if cli.schedule.is_some() { "cli" } else if env_value(&env_pairs, "SPARK_SCHEDULE").is_some() { "env" } else { "default" };
+        let schedule_val = cli.schedule.as_deref().unwrap_or(&"(not set)");
+        println!("  {:30} {:12} {:?}", "--schedule", schedule_src, schedule_val);
+        let sw_src = if cli.schedule_window.is_some() { "cli" } else if env_value(&env_pairs, "SCHEDULE_WINDOW").is_some() { "env" } else { "default" };
+        let sw_val = cli.schedule_window.as_deref().unwrap_or(&"(not set)");
+        println!("  {:30} {:12} {:?}", "--schedule-window", sw_src, sw_val);
+        println!("  {:30} {:12} {}", "--verbose", if cli.verbose { "cli" } else { "default" }, cli.verbose.to_string());
+        println!("  {:30} {:12} {:?}", "Config file", "", cfg_path);
         println!();
         return Ok(());
     }
@@ -492,22 +507,26 @@ fn next_window_start(start: &chrono::NaiveTime) -> chrono::DateTime<chrono::Utc>
     }
 }
 
-/// Print an effective config value: CLI arg > env file, shown as `(not set)` if missing.
+/// Print an effective config value with source: CLI arg > env file, shown as `(not set)` if missing.
 fn print_effective_value(key: &str, cli_val: Option<&String>, env_val: Option<&str>) {
-    let display = match (cli_val, env_val) {
-        (Some(v), _) if !v.is_empty() => v.as_str(),
-        (_, Some(v)) if !v.is_empty() => v,
-        _ => "(not set)",
+    let (display, source) = match (cli_val, env_val) {
+        (Some(v), _) if !v.is_empty() => (v.as_str(), "cli"),
+        (_, Some(v)) if !v.is_empty() => (v, "env"),
+        _ => ("(not set)", "default"),
     };
-    eprintln!("  {:30} {}", key, display);
+    eprintln!("  {:30} {:12} {}", key, source, display);
 }
 
-/// Print a fully obscured password value.
+/// Print a fully obscured password value with source.
 fn print_masked_value(key: &str, cli_val: Option<&String>, env_val: Option<&str>) {
-    let _ = (cli_val, env_val);
-    if cli_val.is_some_and(|v| !v.is_empty()) || env_val.is_some_and(|v| !v.is_empty()) {
-        eprintln!("  {:30} {}", key, "********");
+    let source = match (cli_val, env_val) {
+        (Some(v), _) if !v.is_empty() => "cli",
+        (_, Some(v)) if !v.is_empty() => "env",
+        _ => "default",
+    };
+    if source == "default" {
+        eprintln!("  {:30} {:12} {}", key, source, "(not set)");
     } else {
-        eprintln!("  {:30} {}", key, "(not set)");
+        eprintln!("  {:30} {:12} {}", key, source, "********");
     }
 }
